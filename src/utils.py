@@ -1,0 +1,131 @@
+import os
+import time
+import random
+import numpy as np
+
+
+def get_files_under_directory(path):
+    files = [name for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))]
+    return files
+
+
+def sample_people_for_epoch(dataset_root, people_per_epoch, faces_per_person):
+    """
+    Return a sampled list of people_per_epoch people who has more than 
+    faces_per_person images in the dataset_root. Note that the list contains the
+    names (or folders' names), not full path to them.
+    """
+    # sample some candidates with a margin first, so we can avoid scanning the
+    # entire dataset
+    margin = 1.2
+    candidates = random.sample(os.listdir(dataset_root), int(margin * people_per_epoch))
+    qualified_people = []
+    
+    # ensure each candidate has at least faces_per_person images
+    for name in candidates:
+        name_path = os.path.join(dataset_root, name)
+        
+        if not os.path.isfile(name_path):
+            # this is a folder containing images of a person
+            files = get_files_under_directory(name_path)
+            
+            if len(files) >= faces_per_person:
+                qualified_people.append(name)
+            
+        if len(qualified_people) >= people_per_epoch:
+            break
+            
+    return qualified_people
+
+
+def save_variables_and_metagraph(sess, saver, model_dir, model_name, step):
+    """
+    Save the model checkpoint, and meta graph (if none exists).
+    """
+    print('Saving variables')
+    start_time = time.time()
+    checkpoint_path = os.path.join(model_dir, 'model-%s.ckpt' % model_name)
+    saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
+    save_time_variables = time.time() - start_time
+    print('Variables saved in %.2f seconds' % save_time_variables)
+    metagraph_filename = os.path.join(model_dir, 'model-%s.meta' % model_name)
+    save_time_metagraph = 0
+    
+    # only save meta graph the first time
+    if not os.path.exists(metagraph_filename):
+        print('Saving metagraph')
+        start_time = time.time()
+        saver.export_meta_graph(metagraph_filename)
+        save_time_metagraph = time.time() - start_time
+        print('Metagraph saved in %.2f seconds' % save_time_metagraph)
+        
+    # summary = tf.compat.v1.Summary()
+    # #pylint: disable=maybe-no-member
+    # summary.value.add(tag='time/save_variables', simple_value=save_time_variables)
+    # summary.value.add(tag='time/save_metagraph', simple_value=save_time_metagraph)
+    # summary_writer.add_summary(summary, step)
+
+
+def select_triplets(embeddings, tot_images_per_person, alpha):
+    """
+    Choosing good triplets is crucial and should strike a balance between
+    selecting informative (i.e. challenging) examples and swamping training with examples that
+    are too hard. This is achieve by extending each pair (a, p) to a triplet (a, p, n) by sampling
+    the image n at random, but only between the ones that violate the triplet loss margin. The
+    latter is a form of hard-negative mining, but it is not as aggressive (and much cheaper) than
+    choosing the maximally violating example, as often done in structured output learning.
+    
+    Params:
+        embeddings  A np array of shape (batch_size, emb_size) where embeddings at index 
+                    [0:tot_images_per_person, :]                              belong to person 1
+                    [tot_images_per_person:2 * tot_images_per_person, :]      belong to person 2
+                    [2 * tot_images_per_person:3 * tot_images_per_person, :]  belong to person 3
+                    ...
+        tot_images_per_person   Total number of embeddings per person
+        alpha
+    Returns
+        triplets    A list of [(a, p, n), (a, p, n), ...] where a, p, n are indices of 
+                    embeddings array.
+    """
+    tot_embeddings, emb_size = np.shape(embeddings)
+    tot_people = int(np.ceil(tot_embeddings / tot_images_per_person))
+    triplets = []
+    # distances = []
+
+    # compute triplets for each person
+    for person in range(tot_people):
+        idx_person_start = person * tot_images_per_person
+        idx_person_end = min(idx_person_start + tot_images_per_person, tot_embeddings)
+        #print("====== %i - %i ======" % (idx_person_start, idx_person_end))
+
+        # set each image of a person to be an anchor
+        for idx_person_a in range(idx_person_start, idx_person_end):
+            dist_sqr_all = np.sum(np.square(embeddings[idx_person_a] - embeddings), 1)
+            #print(dist_sqr_all)
+
+            # for every posible positive pair, randomly get a hard negative pair
+            for idx_person_p in range(idx_person_a + 1, idx_person_end):
+                dist_sqr_p = dist_sqr_all[idx_person_p]
+                dist_sqr_n = np.copy(dist_sqr_all)
+                dist_sqr_n[idx_person_start: idx_person_end] = 1000000      # something big to exlude p pairs
+                all_hard_n = np.where(dist_sqr_n - dist_sqr_p < alpha)      # these are the hard n pair
+                n_count = np.shape(all_hard_n)[1]
+                #print("idx_person_p %i, dist_sqr_p %.2f" % (idx_person_p, dist_sqr_p))
+                #print(dist_sqr_all)
+                #print(dist_sqr_n)
+                #print(all_hard_n)
+
+                if n_count > 0:
+                    # if there is at least 1 hard n pair
+                    idx_all_hard_n = np.random.randint(0, n_count)
+                    idx_person_n = all_hard_n[0][idx_all_hard_n]
+                    triplets.append((idx_person_a, idx_person_p, idx_person_n))
+                    # distances.append((dist_sqr_all[idx_person_p], dist_sqr_all[idx_person_n]))
+                    #print("diff %.2f, alpha %f" % (dist_sqr_all[idx_person_n] - dist_sqr_all[idx_person_p], alpha))
+                else:
+                    # no hard n pair. Skip
+                    pass
+                
+
+    np.random.shuffle(triplets)
+    return triplets
