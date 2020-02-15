@@ -20,20 +20,21 @@ class NormDense(tf.keras.layers.Layer):
 
 class ArcFaceModel(tf.keras.Model):
     
-    def __init__(self, backbone, n_classes):
+    def __init__(self, backbone, embedding_size):
         super().__init__()
         self.backbone = backbone
-        self.norm_dense = NormDense(n_classes)
-
+        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.dropout = tf.keras.layers.Dropout(0.4)
+        self.dense = tf.keras.layers.Dense(embedding_size)
+        self.bn2 = tf.keras.layers.BatchNormalization()
+        
     def call(self, inputs, training=False):
-        prelogits = self.backbone(inputs, training=training)
-
-        if training:
-            norm_dense = self.norm_dense(prelogits)
-            return prelogits, norm_dense
-        else:
-            embeddings = tf.nn.l2_normalize(prelogits, axis=-1)
-            return embeddings
+        x = self.backbone(inputs, training=training)
+        x = self.bn1(x, training=training)
+        x = self.dropout(x, training=training)
+        x = self.dense(x, training=training)
+        x = self.bn2(x, training=training)
+        return x
 
 
 # class Model:
