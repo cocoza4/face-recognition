@@ -24,16 +24,17 @@ class ArcFaceModel(tf.keras.Model):
         super().__init__()
         self.backbone = backbone
         self.bn1 = tf.keras.layers.BatchNormalization()
-        self.dropout = tf.keras.layers.Dropout(0.4)
+        # self.dropout = tf.keras.layers.Dropout(0.4)
         self.dense = tf.keras.layers.Dense(embedding_size)
         self.bn2 = tf.keras.layers.BatchNormalization()
         
     def call(self, inputs, training=False):
         x = self.backbone(inputs, training=training)
         x = self.bn1(x, training=training)
-        x = self.dropout(x, training=training)
-        x = self.dense(x, training=training)
+        # x = self.dropout(x, training=training)
+        x = self.dense(x)
         x = self.bn2(x, training=training)
+        x = tf.nn.l2_normalize(x, axis=-1)
         return x
 
 

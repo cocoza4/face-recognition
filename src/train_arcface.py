@@ -52,9 +52,11 @@ def imagenet_preprocess(x):
     # image[..., 0] /= std[0]
     # image[..., 1] /= std[1]
     # image[..., 2] /= std[2]
-    x /= 255.
-    x = tf.stack([x[..., 0] - mean[0], x[..., 1] - mean[1], x[..., 2] - mean[2]], axis=-1)
-    x = tf.stack([x[..., 0] / std[0], x[..., 1] / std[1], x[..., 2] / std[2]], axis=-1)
+    # x /= 255.
+    # x = tf.stack([x[..., 0] - mean[0], x[..., 1] - mean[1], x[..., 2] - mean[2]], axis=-1)
+    # x = tf.stack([x[..., 0] / std[0], x[..., 1] / std[1], x[..., 2] / std[2]], axis=-1)
+    x -= 127.5
+    x *= 0.0078125
     return x
 
 
@@ -65,7 +67,7 @@ def preprocess(path, training=True):
         image = tf.image.random_flip_left_right(image)
     image = tf.cast(image, tf.float32)
     image = imagenet_preprocess(image)
-    image = tf.image.resize(image, (args.img_width, args.img_height))
+    # image = tf.image.resize(image, (args.img_width, args.img_height))
 
     # image = tf.image.resize(image, (224, 224))
     # image = tf.image.random_crop(image, size=[112, 112, 3])
@@ -76,7 +78,7 @@ def evaluate(model, lfw_paths, actual_issame, batch_size, n_folds):
     assert len(lfw_paths) == n_images
 
     embs_array = np.zeros((n_images, args.embedding_size))
-    it = tqdm(range(0, n_images, batch_size), 'Predict embeddings')
+    it = tqdm(range(0, n_images, batch_size), 'evaluate on LFW')
     for start in it:
         end = start + batch_size
         preprocessed = np.array([preprocess(path, training=False).numpy() for path in lfw_paths[start:end]])
@@ -110,7 +112,8 @@ def main():
     save_configs()
 
     logging.info('creating model')
-    backbone = tf.keras.applications.DenseNet121(include_top=False, pooling='avg')
+    backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
+    # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg') # not working very well
     model = ArcFaceModel(backbone, args.embedding_size)
     emb_weights = tf.Variable(tf.random.truncated_normal(shape=[args.n_classes, args.embedding_size]), 
                             name='embedding_weights', dtype=tf.float32)
@@ -120,7 +123,7 @@ def main():
                 decay_rate=args.lr_decay_rate,
                 staircase=True)
 
-    optimizer = tf.keras.optimizers.Adam(args.learning_rate)            
+    optimizer = tf.keras.optimizers.Adam(lr_schedule)            
 
     current_time = datetime.now().strftime("%Y-%m-%d")
     logdir = os.path.join(args.logdir, current_time)
@@ -152,10 +155,10 @@ def main():
                 t1 = time.time()
                 loss = train_step(model, inputs, targets, emb_weights, optimizer)
                 elapsed = time.time() - t1
-                # current_lr = lr_schedule(global_step)
-                # summary.scalar('learning_rate', current_lr, step=global_step)
-                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f' % 
-                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss))
+                current_lr = lr_schedule(global_step)
+                summary.scalar('learning_rate', current_lr, step=global_step)
+                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
+                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
 
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
@@ -197,8 +200,8 @@ if __name__ == "__main__":
     parser.add_argument("--s", help="s.", type=float, default=64.)
     parser.add_argument("--initial_epoch", help="Initial epoch.", type=int, default=0)
     parser.add_argument("--epochs", help="Number of epochs.", type=int, default=100)
-    parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.001)
-    parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=100000)
+    parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.01)
+    parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=10000)
     parser.add_argument("--lr_decay_rate", help="Learning rate decay rate.", type=float, default=0.96)
 
     parser.add_argument("--lfw_pairs", help="The file containing the pairs to use for validation.", 

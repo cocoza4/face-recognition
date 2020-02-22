@@ -1,7 +1,29 @@
 import os
 import time
 import random
+import itertools
 import numpy as np
+
+
+def flatten(xs):
+    return list(itertools.chain(*xs))
+
+
+def get_data(path):
+    ids = [o for o in os.listdir(path) if os.path.isdir(os.path.join(path, o))]
+    ids.sort()
+    cat_num = len(ids)
+
+    id_dict = dict(zip(ids, list(range(cat_num))))
+    paths = []
+    labels = []
+    for i in ids:
+        cur_dir = os.path.join(path, i)
+        fns = os.listdir(cur_dir)
+        paths.append([os.path.join(cur_dir, fn) for fn in fns])
+        labels.append([id_dict[i]] * len(fns))
+
+    return flatten(paths), flatten(labels)
 
 
 def get_files_under_directory(path):
