@@ -2,11 +2,18 @@ import os
 import time
 import random
 import itertools
+import shutil
 import numpy as np
 
 
 def flatten(xs):
     return list(itertools.chain(*xs))
+
+
+def create_dir(path):
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
 
 
 def get_data(path):
@@ -25,6 +32,17 @@ def get_data(path):
 
     return flatten(paths), flatten(labels)
 
+def combine_datasets(data_paths):
+    all_paths, all_labels = [], []
+    id_start = 0
+    for path in data_paths:
+        paths, labels = get_data(path)
+        labels = np.array(labels) + id_start
+        all_paths.extend(paths)
+        all_labels.extend(labels)
+
+        id_start += np.max(labels) + 1
+    return all_paths, all_labels
 
 def get_files_under_directory(path):
     files = [name for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))]

@@ -13,7 +13,7 @@ from datetime import datetime
 import lfw
 import losses
 from models import ArcFaceModel
-from generators import DataGenerator
+from generators import DataGenerator, TFRecordDataGenerator
 
 
 @tf.function
@@ -59,19 +59,50 @@ def imagenet_preprocess(x):
     x *= 0.0078125
     return x
 
+def parse_example(proto):
+    feature_description = {
+        'image/encoded': tf.io.FixedLenFeature([], tf.string),
+        'image/label': tf.io.FixedLenFeature([], tf.int64),
+        'image/width': tf.io.FixedLenFeature([], tf.int64),
+        'image/height': tf.io.FixedLenFeature([], tf.int64)
+    }
+    tf_example = tf.io.parse_single_example(proto, feature_description)
+    return tf_example
 
-def preprocess(path, training=True):
-    raw = tf.io.read_file(path)
-    image = tf.image.decode_png(raw)
+def _preprocess(image, training):
     if training:
         image = tf.image.random_flip_left_right(image)
     image = tf.cast(image, tf.float32)
-    image = imagenet_preprocess(image)
-    # image = tf.image.resize(image, (args.img_width, args.img_height))
-
-    # image = tf.image.resize(image, (224, 224))
-    # image = tf.image.random_crop(image, size=[112, 112, 3])
+    image -= 127.5
+    image *= 0.0078125
     return image
+
+def preprocess_tf_example(example, training=True):
+    width = example['image/width']
+    height = example['image/height']
+    label = tf.cast(example['image/label'], tf.int32)
+    image = tf.io.decode_image(example['image/encoded'])
+    return _preprocess(image, training=training), label
+    
+
+def preprocess(path, training=True):
+    raw = tf.io.read_file(path)
+    image = tf.image.decode_image(raw)
+    return _preprocess(image, training=training)
+
+
+# def preprocess(path, training=True):
+#     raw = tf.io.read_file(path)
+#     image = tf.image.decode_png(raw)
+#     if training:
+#         image = tf.image.random_flip_left_right(image)
+#     image = tf.cast(image, tf.float32)
+#     image = imagenet_preprocess(image)
+#     # image = tf.image.resize(image, (args.img_width, args.img_height))
+
+#     # image = tf.image.resize(image, (224, 224))
+#     # image = tf.image.random_crop(image, size=[112, 112, 3])
+#     return image
 
 def evaluate(model, lfw_paths, actual_issame, batch_size, n_folds):
     n_images = len(actual_issame) * 2
@@ -118,12 +149,12 @@ def main():
     emb_weights = tf.Variable(tf.random.truncated_normal(shape=[args.n_classes, args.embedding_size]), 
                             name='embedding_weights', dtype=tf.float32)
 
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(args.learning_rate,
-                decay_steps=args.lr_decay_steps,
-                decay_rate=args.lr_decay_rate,
-                staircase=True)
-
-    optimizer = tf.keras.optimizers.Adam(lr_schedule)            
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(args.learning_rate,
+    #             decay_steps=args.lr_decay_steps,
+    #             decay_rate=args.lr_decay_rate,
+    #             staircase=True)
+    # optimizer = tf.keras.optimizers.Adam(lr_schedule)
+    optimizer = tf.keras.optimizers.Adam(args.learning_rate)     
 
     current_time = datetime.now().strftime("%Y-%m-%d")
     logdir = os.path.join(args.logdir, current_time)
@@ -145,8 +176,13 @@ def main():
     pairs = lfw.read_pairs(args.lfw_pairs)
     lfw_paths, actual_issame = lfw.get_paths(args.lfw_dir, pairs)
 
-    train_gen = DataGenerator(args.data_dir, batch_size=args.batch_size)
-    train_gen_it = train_gen.generate(preprocess_fn=preprocess)
+    # train_gen = DataGenerator(args.data_dir, batch_size=args.batch_size)
+    # train_gen_it = train_gen.generate(preprocess_fn=preprocess)
+    # steps_per_epoch = train_gen.steps_per_epoch()
+
+    # TF Records
+    train_gen = TFRecordDataGenerator(args.data_dir, batch_size=args.batch_size)
+    train_gen_it = train_gen.generate(example_parser=parse_example, preprocess_fn=preprocess_tf_example)
     steps_per_epoch = train_gen.steps_per_epoch()
 
     with writer.as_default():
@@ -155,10 +191,12 @@ def main():
                 t1 = time.time()
                 loss = train_step(model, inputs, targets, emb_weights, optimizer)
                 elapsed = time.time() - t1
-                current_lr = lr_schedule(global_step)
-                summary.scalar('learning_rate', current_lr, step=global_step)
-                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
-                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
+                # current_lr = lr_schedule(global_step)
+                # summary.scalar('learning_rate', current_lr, step=global_step)
+                # print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
+                #     (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
+                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f' % 
+                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss))
 
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
@@ -188,7 +226,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_to_keep", help="Base model checkpoints directory.", type=int, default=10)
     parser.add_argument("--n_classes", help="Number of classes(faces).", type=int, required=True)
     parser.add_argument("--batch_size", help="Batch size.", type=int, default=256)
-    parser.add_argument("--backbone", help="Backbone model.", default='densenet101')
+    parser.add_argument("--backbone", help="Backbone model.", default='densenet121')
     parser.add_argument("--img_width", help="Image Width.", type=int, default=112)
     parser.add_argument("--img_height", help="Image Height.", type=int, default=112)
     parser.add_argument("--data_dir", help="Data directory.", 
@@ -200,7 +238,7 @@ if __name__ == "__main__":
     parser.add_argument("--s", help="s.", type=float, default=64.)
     parser.add_argument("--initial_epoch", help="Initial epoch.", type=int, default=0)
     parser.add_argument("--epochs", help="Number of epochs.", type=int, default=100)
-    parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.01)
+    parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.001)
     parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=10000)
     parser.add_argument("--lr_decay_rate", help="Learning rate decay rate.", type=float, default=0.96)
 
