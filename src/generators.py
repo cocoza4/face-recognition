@@ -19,7 +19,7 @@ class DataGenerator:
             steps += 1
         return steps
 
-    def generate(self, preprocess_fn=None, shuffle_buffer=2000000):
+    def generate(self, preprocess_fn=None, shuffle_buffer=200000):
         ds = (tf.data.Dataset.from_tensor_slices((self.paths, self.labels))
             .cache()
             .shuffle(shuffle_buffer)
@@ -51,11 +51,10 @@ class TFRecordDataGenerator:
             steps += 1
         return steps
     
-    def generate(self, example_parser, preprocess_fn=None, shuffle_buffer=2000000):
+    def generate(self, example_parser, preprocess_fn=None, shuffle_buffer=100000):
         tfrecords = self._tfrecord_files()
 
         ds = (tf.data.TFRecordDataset(filenames=tfrecords)
-            .cache()
             .shuffle(shuffle_buffer)
             .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
             .map(example_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE))

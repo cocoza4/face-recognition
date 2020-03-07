@@ -146,15 +146,23 @@ def main():
     backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
     # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg') # not working very well
     model = ArcFaceModel(backbone, args.embedding_size)
-    emb_weights = tf.Variable(tf.random.truncated_normal(shape=[args.n_classes, args.embedding_size]), 
-                            name='embedding_weights', dtype=tf.float32)
+    initializer = tf.initializers.VarianceScaling()
+    emb_weights = tf.Variable(initializer(shape=[args.n_classes, args.embedding_size]), 
+                                name='embedding_weights', dtype=tf.float32)
+
+    global_step = tf.Variable(0, name="global_step", dtype=tf.int64, trainable=False)
 
     # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(args.learning_rate,
     #             decay_steps=args.lr_decay_steps,
     #             decay_rate=args.lr_decay_rate,
     #             staircase=True)
     # optimizer = tf.keras.optimizers.Adam(lr_schedule)
-    optimizer = tf.keras.optimizers.Adam(args.learning_rate)     
+    # optimizer = tf.keras.optimizers.Adam(args.learning_rate)
+    
+    lr_steps = [4000, 10000, 20000]
+    lr_values = [0.001, 0.0005, 0.0003, 0.0001]
+    learning_rate = tf.compat.v1.train.piecewise_constant(global_step, boundaries=lr_steps, values=lr_values, name='lr_schedule')
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate)
 
     current_time = datetime.now().strftime("%Y-%m-%d")
     logdir = os.path.join(args.logdir, current_time)
@@ -162,7 +170,6 @@ def main():
     summary = tf.compat.v2.summary
     writer = summary.create_file_writer(logdir)
 
-    global_step = tf.Variable(0, name="global_step", dtype=tf.int64)
     ckpt = tf.train.Checkpoint(global_step=global_step, backbone=model.backbone, model=model, optimizer=optimizer, emb_weights=emb_weights)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.ckpt_dir, max_to_keep=10, checkpoint_name=args.backbone)
 
@@ -183,7 +190,8 @@ def main():
     # TF Records
     train_gen = TFRecordDataGenerator(args.data_dir, batch_size=args.batch_size)
     train_gen_it = train_gen.generate(example_parser=parse_example, preprocess_fn=preprocess_tf_example)
-    steps_per_epoch = train_gen.steps_per_epoch()
+    # steps_per_epoch = train_gen.steps_per_epoch()
+    steps_per_epoch = 26332
 
     with writer.as_default():
         for epoch in range(args.initial_epoch, args.epochs):
@@ -192,11 +200,21 @@ def main():
                 loss = train_step(model, inputs, targets, emb_weights, optimizer)
                 elapsed = time.time() - t1
                 # current_lr = lr_schedule(global_step)
+
+                # current_lr = optimizer.lr.numpy()
                 # summary.scalar('learning_rate', current_lr, step=global_step)
+                # # print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
+                # #     (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
+
+                current_lr = learning_rate().numpy()
+                summary.scalar('learning_rate', current_lr, step=global_step)
+                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
+                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
                 # print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
                 #     (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
-                print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f' % 
-                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss))
+
+                # if tf.math.is_nan(loss):
+                #     optimizer.lr.assign(optimizer.lr * 0.5)
 
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
@@ -239,7 +257,7 @@ if __name__ == "__main__":
     parser.add_argument("--initial_epoch", help="Initial epoch.", type=int, default=0)
     parser.add_argument("--epochs", help="Number of epochs.", type=int, default=100)
     parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.001)
-    parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=10000)
+    parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=5000)
     parser.add_argument("--lr_decay_rate", help="Learning rate decay rate.", type=float, default=0.96)
 
     parser.add_argument("--lfw_pairs", help="The file containing the pairs to use for validation.", 
