@@ -2,6 +2,7 @@ import os
 import csv
 import math
 import time
+import yaml
 import argparse
 import logging
 import numpy as np
@@ -91,19 +92,6 @@ def preprocess(path, training=True):
     return _preprocess(image, training=training)
 
 
-# def preprocess(path, training=True):
-#     raw = tf.io.read_file(path)
-#     image = tf.image.decode_png(raw)
-#     if training:
-#         image = tf.image.random_flip_left_right(image)
-#     image = tf.cast(image, tf.float32)
-#     image = imagenet_preprocess(image)
-#     # image = tf.image.resize(image, (args.img_width, args.img_height))
-
-#     # image = tf.image.resize(image, (224, 224))
-#     # image = tf.image.random_crop(image, size=[112, 112, 3])
-#     return image
-
 def evaluate(model, lfw_paths, actual_issame, batch_size, n_folds):
     n_images = len(actual_issame) * 2
     assert len(lfw_paths) == n_images
@@ -138,16 +126,34 @@ def save_lfw_result(accuracy, val, far, frr):
             writer.writeheader()
         writer.writerow({'accuracy': accuracy, 'val': val, 'far': far, 'frr':frr})
 
+def load_config_file(path):
+    with open(path) as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+        return config
+
 
 def main():
     save_configs()
 
+    config = load_config_file(args.config_path)
+    embedding_size = config['embedding_size']
+    n_classes = config['n_classes']
+    lr_steps = config['lr_steps']
+    lr_values = config['lr_values']
+    ckpt_dir = config['ckpt_dir']
+    backbone = config['backbone']
+    lfw_pairs = config['lfw_pairs']
+    lfw_dir = config['lfw_dir']
+    initial_epoch = config['initial_epoch']
+    epochs = config['epochs']
+
     logging.info('creating model')
     backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
     # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg') # not working very well
-    model = ArcFaceModel(backbone, args.embedding_size)
+    model = ArcFaceModel(backbone, embedding_size)
+
     initializer = tf.initializers.VarianceScaling()
-    emb_weights = tf.Variable(initializer(shape=[args.n_classes, args.embedding_size]), 
+    emb_weights = tf.Variable(initializer(shape=[n_classes, embedding_size]), 
                                 name='embedding_weights', dtype=tf.float32)
 
     global_step = tf.Variable(0, name="global_step", dtype=tf.int64, trainable=False)
@@ -158,11 +164,9 @@ def main():
     #             staircase=True)
     # optimizer = tf.keras.optimizers.Adam(lr_schedule)
     # optimizer = tf.keras.optimizers.Adam(args.learning_rate)
-    
-    lr_steps = [4000, 10000, 20000]
-    lr_values = [0.001, 0.0005, 0.0003, 0.0001]
+
     learning_rate = tf.compat.v1.train.piecewise_constant(global_step, boundaries=lr_steps, values=lr_values, name='lr_schedule')
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate)
+    optimizer = tf.keras.optimizers.Adam(learning_rate)
 
     current_time = datetime.now().strftime("%Y-%m-%d")
     logdir = os.path.join(args.logdir, current_time)
@@ -171,7 +175,7 @@ def main():
     writer = summary.create_file_writer(logdir)
 
     ckpt = tf.train.Checkpoint(global_step=global_step, backbone=model.backbone, model=model, optimizer=optimizer, emb_weights=emb_weights)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, args.ckpt_dir, max_to_keep=10, checkpoint_name=args.backbone)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=10, checkpoint_name=backbone)
 
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -180,8 +184,8 @@ def main():
         logging.info("Initializing from scratch.")
 
     logging.info('reading lfw data')
-    pairs = lfw.read_pairs(args.lfw_pairs)
-    lfw_paths, actual_issame = lfw.get_paths(args.lfw_dir, pairs)
+    pairs = lfw.read_pairs(lfw_pairs)
+    lfw_paths, actual_issame = lfw.get_paths(lfw_dir, pairs)
 
     # train_gen = DataGenerator(args.data_dir, batch_size=args.batch_size)
     # train_gen_it = train_gen.generate(preprocess_fn=preprocess)
@@ -194,7 +198,7 @@ def main():
     steps_per_epoch = 26332
 
     with writer.as_default():
-        for epoch in range(args.initial_epoch, args.epochs):
+        for epoch in range(initial_epoch, epochs):
             for step, (inputs, targets) in enumerate(train_gen_it):
                 t1 = time.time()
                 loss = train_step(model, inputs, targets, emb_weights, optimizer)
@@ -210,11 +214,6 @@ def main():
                 summary.scalar('learning_rate', current_lr, step=global_step)
                 print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
                     (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
-                # print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
-                #     (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
-
-                # if tf.math.is_nan(loss):
-                #     optimizer.lr.assign(optimizer.lr * 0.5)
 
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
@@ -238,37 +237,39 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--config_path', type=str, help='Path to config file', required=True)
+
     # parser.add_argument('--gpu_memory_fraction', type=float, 
     #                     help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.9)
-    parser.add_argument("--ckpt_dir", help="Base model checkpoints directory.", required=True)
-    parser.add_argument("--max_to_keep", help="Base model checkpoints directory.", type=int, default=10)
-    parser.add_argument("--n_classes", help="Number of classes(faces).", type=int, required=True)
-    parser.add_argument("--batch_size", help="Batch size.", type=int, default=256)
-    parser.add_argument("--backbone", help="Backbone model.", default='densenet121')
-    parser.add_argument("--img_width", help="Image Width.", type=int, default=112)
-    parser.add_argument("--img_height", help="Image Height.", type=int, default=112)
-    parser.add_argument("--data_dir", help="Data directory.", 
-                        default="/mnt/disks/data/datasets/vggface2/train_mtcnnpy_112_margin32")
-    parser.add_argument("--embedding_size", help="Face embedding size.", type=int, default=512)
-    parser.add_argument("--m1", help="m1.", type=float, default=1.0)
-    parser.add_argument("--m2", help="m2.", type=float, default=0.3)
-    parser.add_argument("--m3", help="m3.", type=float, default=0.2)
-    parser.add_argument("--s", help="s.", type=float, default=64.)
-    parser.add_argument("--initial_epoch", help="Initial epoch.", type=int, default=0)
-    parser.add_argument("--epochs", help="Number of epochs.", type=int, default=100)
-    parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.001)
-    parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=5000)
-    parser.add_argument("--lr_decay_rate", help="Learning rate decay rate.", type=float, default=0.96)
+    # parser.add_argument("--ckpt_dir", help="Base model checkpoints directory.", required=True)
+    # parser.add_argument("--max_to_keep", help="Base model checkpoints directory.", type=int, default=10)
+    # parser.add_argument("--n_classes", help="Number of classes(faces).", type=int, required=True)
+    # parser.add_argument("--batch_size", help="Batch size.", type=int, default=256)
+    # parser.add_argument("--backbone", help="Backbone model.", default='densenet121')
+    # parser.add_argument("--img_width", help="Image Width.", type=int, default=112)
+    # parser.add_argument("--img_height", help="Image Height.", type=int, default=112)
+    # parser.add_argument("--data_dir", help="Data directory.", 
+    #                     default="/mnt/disks/data/datasets/vggface2/train_mtcnnpy_112_margin32")
+    # parser.add_argument("--embedding_size", help="Face embedding size.", type=int, default=512)
+    # parser.add_argument("--m1", help="m1.", type=float, default=1.0)
+    # parser.add_argument("--m2", help="m2.", type=float, default=0.3)
+    # parser.add_argument("--m3", help="m3.", type=float, default=0.2)
+    # parser.add_argument("--s", help="s.", type=float, default=64.)
+    # parser.add_argument("--initial_epoch", help="Initial epoch.", type=int, default=0)
+    # parser.add_argument("--epochs", help="Number of epochs.", type=int, default=100)
+    # parser.add_argument('--learning_rate', help='learning rate.', type=float, default=0.001)
+    # parser.add_argument("--lr_decay_steps", help="Number of steps to decay the learning rate to another step.", type=int, default=5000)
+    # parser.add_argument("--lr_decay_rate", help="Learning rate decay rate.", type=float, default=0.96)
 
-    parser.add_argument("--lfw_pairs", help="The file containing the pairs to use for validation.", 
-                        default="/mnt/disks/data/datasets/lfw/raw_mtcnnpy_160/pairs.txt")
-    parser.add_argument("--lfw_dir", help="Path to the data directory containing aligned face patches.", 
-                        default="/mnt/disks/data/datasets/lfw/raw_mtcnnpy_160")
-    parser.add_argument("--eval_every", help="Evaluate on LFW data every n epochs.", type=int, default=1)
+    # parser.add_argument("--lfw_pairs", help="The file containing the pairs to use for validation.", 
+    #                     default="/mnt/disks/data/datasets/lfw/raw_mtcnnpy_160/pairs.txt")
+    # parser.add_argument("--lfw_dir", help="Path to the data directory containing aligned face patches.", 
+    #                     default="/mnt/disks/data/datasets/lfw/raw_mtcnnpy_160")
+    # parser.add_argument("--eval_every", help="Evaluate on LFW data every n epochs.", type=int, default=1)
 
-    parser.add_argument("--logdir", help="Log directory.", required=True)
-    parser.add_argument("--lfw_n_folds", help="Number of folds to use for cross validation. Mainly used for testing.", 
-                        type=int, default=10)
+    # parser.add_argument("--logdir", help="Log directory.", required=True)
+    # parser.add_argument("--lfw_n_folds", help="Number of folds to use for cross validation. Mainly used for testing.", 
+    #                     type=int, default=10)
 
     args = parser.parse_args()
     main()

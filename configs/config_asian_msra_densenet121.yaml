@@ -1,0 +1,29 @@
+backbone: densenet121
+
+m1: 1.
+m2: .5
+m3: 0.
+s: 64.
+
+img_width: 112
+img_height: 112
+embedding_size: 512
+n_classes: 180855
+max_to_keep: 10
+
+batch_size: 256
+initial_epoch: 0
+epochs: 100
+learning_rate: 0.001
+eval_every: 1
+lfw_n_folds: 10
+
+lr_steps: [8000, 12000, 20000]
+lr_values: [0.001, 0.0005, 0.0003, 0.0001]
+
+data_dir: /mnt/disks/data/sirius/datasets/asian_and_msra_mtcnnpy_112_margin32
+lfw_pairs: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt
+lfw_dir: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+ckpt_dir: /home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3
+logdir: /home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3/logs
