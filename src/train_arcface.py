@@ -18,10 +18,10 @@ from generators import DataGenerator, TFRecordDataGenerator
 
 
 @tf.function
-def train_step(model, inputs, labels, emb_weights, optimizer):
+def train_step(model, inputs, labels, emb_weights, optimizer, n_classes, m1, m2, m3, s):
     with tf.GradientTape(persistent=False) as tape:
         embeddings = model(inputs, training=True)
-        loss = losses.arcface_loss(embeddings, emb_weights, labels, args.n_classes, args.m1, args.m2, args.m3, args.s)
+        loss = losses.arcface_loss(embeddings, emb_weights, labels, n_classes, m1, m2, m3, s)
     
     trainable_vars = model.trainable_variables + [emb_weights]
     gradients = tape.gradient(loss, trainable_vars)
@@ -30,35 +30,17 @@ def train_step(model, inputs, labels, emb_weights, optimizer):
     return loss
 
 @tf.function
-def test_step(model, images, labels):
+def test_step(model, images, labels, n_classes, m1, m2, m3, s):
     # training=False is only needed if there are layers with different
     # behavior during training versus inference (e.g. Dropout).
     embeddings = model(inputs, training=True) # training mode as loss is calculated
-    loss = losses.arcface_loss(embeddings, emb_weights, labels, args.n_classes, args.m1, args.m2, args.m3, args.s)
-
+    loss = losses.arcface_loss(embeddings, emb_weights, labels, n_classes, m1, m2, m3, s)
     return loss
 
 @tf.function
 def predict_embedding(model, images):
     embeddings = model(images, training=False)
     return embeddings
-
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
-def imagenet_preprocess(x):
-    # image /= 255.
-    # image[..., 0] -= mean[0]
-    # image[..., 1] -= mean[1]
-    # image[..., 2] -= mean[2]
-    # image[..., 0] /= std[0]
-    # image[..., 1] /= std[1]
-    # image[..., 2] /= std[2]
-    # x /= 255.
-    # x = tf.stack([x[..., 0] - mean[0], x[..., 1] - mean[1], x[..., 2] - mean[2]], axis=-1)
-    # x = tf.stack([x[..., 0] / std[0], x[..., 1] / std[1], x[..., 2] / std[2]], axis=-1)
-    x -= 127.5
-    x *= 0.0078125
-    return x
 
 def parse_example(proto):
     feature_description = {
@@ -92,11 +74,11 @@ def preprocess(path, training=True):
     return _preprocess(image, training=training)
 
 
-def evaluate(model, lfw_paths, actual_issame, batch_size, n_folds):
+def evaluate(model, lfw_paths, actual_issame, batch_size, embedding_size, n_folds):
     n_images = len(actual_issame) * 2
     assert len(lfw_paths) == n_images
 
-    embs_array = np.zeros((n_images, args.embedding_size))
+    embs_array = np.zeros((n_images, embedding_size))
     it = tqdm(range(0, n_images, batch_size), 'evaluate on LFW')
     for start in it:
         end = start + batch_size
@@ -110,15 +92,15 @@ def evaluate(model, lfw_paths, actual_issame, batch_size, n_folds):
 
     return np.mean(accuracy), val, far, frr
 
-def save_configs():
-    with open(args.ckpt_dir + '/configs.txt', 'w') as f:
+def save_configs(config):
+    with open(config['ckpt_dir'] + '/configs.txt', 'w') as f:
         f.write('Parameters\n')
-        for arg, value in vars(args).items():
+        for arg, value in config.items():
             f.write('{}: {}\n'.format(arg, value))
 
-def save_lfw_result(accuracy, val, far, frr):
+def save_lfw_result(path, accuracy, val, far, frr):
     columns = ['accuracy', 'val', 'far', 'frr']
-    lfw_file = args.ckpt_dir + '/lfw_results.csv'
+    lfw_file = path + '/lfw_results.csv'
     exists = os.path.exists(lfw_file)
     with open(lfw_file, mode='a+') as f:
         writer = csv.DictWriter(f, fieldnames=columns)
@@ -133,27 +115,20 @@ def load_config_file(path):
 
 
 def main():
-    save_configs()
-
     config = load_config_file(args.config_path)
-    embedding_size = config['embedding_size']
-    n_classes = config['n_classes']
-    lr_steps = config['lr_steps']
-    lr_values = config['lr_values']
-    ckpt_dir = config['ckpt_dir']
-    backbone = config['backbone']
-    lfw_pairs = config['lfw_pairs']
-    lfw_dir = config['lfw_dir']
+    save_configs(config)
+
     initial_epoch = config['initial_epoch']
     epochs = config['epochs']
 
     logging.info('creating model')
     backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
     # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg') # not working very well
-    model = ArcFaceModel(backbone, embedding_size)
+    
+    model = ArcFaceModel(backbone, config['embedding_size'])
 
     initializer = tf.initializers.VarianceScaling()
-    emb_weights = tf.Variable(initializer(shape=[n_classes, embedding_size]), 
+    emb_weights = tf.Variable(initializer(shape=[config['n_classes'], config['embedding_size']]), 
                                 name='embedding_weights', dtype=tf.float32)
 
     global_step = tf.Variable(0, name="global_step", dtype=tf.int64, trainable=False)
@@ -165,17 +140,17 @@ def main():
     # optimizer = tf.keras.optimizers.Adam(lr_schedule)
     # optimizer = tf.keras.optimizers.Adam(args.learning_rate)
 
-    learning_rate = tf.compat.v1.train.piecewise_constant(global_step, boundaries=lr_steps, values=lr_values, name='lr_schedule')
+    learning_rate = tf.compat.v1.train.piecewise_constant(global_step, boundaries=config['lr_steps'], values=config['lr_values'], name='lr_schedule')
     optimizer = tf.keras.optimizers.Adam(learning_rate)
 
     current_time = datetime.now().strftime("%Y-%m-%d")
-    logdir = os.path.join(args.logdir, current_time)
+    logdir = os.path.join(config['logdir'], current_time)
 
     summary = tf.compat.v2.summary
     writer = summary.create_file_writer(logdir)
 
     ckpt = tf.train.Checkpoint(global_step=global_step, backbone=model.backbone, model=model, optimizer=optimizer, emb_weights=emb_weights)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=10, checkpoint_name=backbone)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, config['ckpt_dir'], max_to_keep=config['max_to_keep'], checkpoint_name=config['backbone'])
 
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -184,24 +159,24 @@ def main():
         logging.info("Initializing from scratch.")
 
     logging.info('reading lfw data')
-    pairs = lfw.read_pairs(lfw_pairs)
-    lfw_paths, actual_issame = lfw.get_paths(lfw_dir, pairs)
+    pairs = lfw.read_pairs(config['lfw_pairs'])
+    lfw_paths, actual_issame = lfw.get_paths(config['lfw_dir'], pairs)
 
     # train_gen = DataGenerator(args.data_dir, batch_size=args.batch_size)
     # train_gen_it = train_gen.generate(preprocess_fn=preprocess)
     # steps_per_epoch = train_gen.steps_per_epoch()
 
     # TF Records
-    train_gen = TFRecordDataGenerator(args.data_dir, batch_size=args.batch_size)
+    train_gen = TFRecordDataGenerator(config['data_dir'], batch_size=config['batch_size'])
     train_gen_it = train_gen.generate(example_parser=parse_example, preprocess_fn=preprocess_tf_example)
     # steps_per_epoch = train_gen.steps_per_epoch()
-    steps_per_epoch = 26332
 
     with writer.as_default():
         for epoch in range(initial_epoch, epochs):
             for step, (inputs, targets) in enumerate(train_gen_it):
                 t1 = time.time()
-                loss = train_step(model, inputs, targets, emb_weights, optimizer)
+                loss = train_step(model, inputs, targets, emb_weights, optimizer, 
+                                config['n_classes'], config['m1'], config['m2'], config['m3'], config['s'])
                 elapsed = time.time() - t1
                 # current_lr = lr_schedule(global_step)
 
@@ -213,21 +188,21 @@ def main():
                 current_lr = learning_rate().numpy()
                 summary.scalar('learning_rate', current_lr, step=global_step)
                 print('Epoch: %d[%d/%d]\tStep %d\tTime %.3f\tLoss %2.3f\tlr %.5f' % 
-                    (epoch+1, step+1, steps_per_epoch, global_step, elapsed, loss, current_lr))
+                    (epoch+1, step+1, config['steps_per_epoch'], global_step, elapsed, loss, current_lr))
 
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
 
-            if epoch % args.eval_every == 0 or epoch == args.epochs-1:
+            if epoch % config['eval_every'] == 0 or epoch == epochs-1:
                 t1 = time.time()
-                accuracy, val, far, frr = evaluate(model, lfw_paths, actual_issame, args.batch_size, args.lfw_n_folds)
+                accuracy, val, far, frr = evaluate(model, lfw_paths, actual_issame, config['batch_size'], config['embedding_size'], config['lfw_n_folds'])
                 time_elapsed = time.time() - t1
                 summary.scalar('lfw/accuracy', accuracy, step=global_step)
                 summary.scalar('lfw/val_rate', val, step=global_step)
                 summary.scalar('lfw/far', far, step=global_step)
                 summary.scalar('lfw/frr', frr, step=global_step)
                 summary.scalar('lfw/time_elapsed', time_elapsed, step=global_step)
-                save_lfw_result(accuracy, val, far, frr)
+                save_lfw_result(config['ckpt_dir'], accuracy, val, far, frr)
 
             writer.flush()
             save_path = ckpt_manager.save()

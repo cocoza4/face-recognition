@@ -1,4 +1,6 @@
 import tensorflow as tf
+import tensorflow.keras.backend as K
+
 
 def arcface_loss(norm_embeddings, weights, labels, n_classes, m1, m2, m3, s):
     # norm_embedding = tf.nn.l2_normalize(embeddings, axis=1) * s
@@ -8,6 +10,7 @@ def arcface_loss(norm_embeddings, weights, labels, n_classes, m1, m2, m3, s):
     indices = tf.stack([tf.range(norm_embeddings.shape[0])[:, None], labels[:, None]], axis=-1)
     zy = tf.gather_nd(fc7, indices=indices)
     cos_t = zy / s
+    cos_t = tf.clip_by_value(cos_t, -1.0+K.epsilon(), 1.0-K.epsilon()) # clip to prevent nan
     theta = tf.acos(cos_t)
     new_zy = (tf.cos(theta*m1 + m2) - m3) * s
     diff = new_zy - zy
