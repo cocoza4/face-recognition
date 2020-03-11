@@ -1,4 +1,4 @@
-backbone: densenet121
+backbone: resnet101v2
 
 m1: 1.
 m2: .5
@@ -26,5 +26,5 @@ data_dir: /mnt/disks/data/sirius/datasets/asian_and_msra_mtcnnpy_112_margin32
 lfw_pairs: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt
 lfw_dir: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
 
-ckpt_dir: /home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3
-logdir: /home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3/logs
+ckpt_dir: /home/peeranat_absoroute_io/trained_models/arcface_models/resnet101v2
+logdir: /home/peeranat_absoroute_io/trained_models/arcface_models/resnet101v2/logs

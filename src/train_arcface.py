@@ -123,7 +123,8 @@ def main():
 
     logging.info('creating model')
     backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
-    # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg') # not working very well
+    # backbone = tf.keras.applications.ResNet101(weights=None, include_top=False, pooling='avg')
+    # backbone = tf.keras.applications.ResNet101V2(weights=None, include_top=False, pooling='avg')
     
     model = ArcFaceModel(backbone, config['embedding_size'])
 
