@@ -62,5 +62,5 @@ class TFRecordDataGenerator:
         if preprocess_fn:
             ds = ds.map(preprocess_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-        ds = ds.batch(self.batch_size)
+        ds = ds.batch(self.batch_size).repeat()
         return ds

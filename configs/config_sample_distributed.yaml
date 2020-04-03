@@ -1,0 +1,31 @@
+backbone: densenet121
+
+m1: 1.
+m2: .5
+m3: 0.
+s: 64.
+
+img_width: 112
+img_height: 112
+embedding_size: 512
+n_classes: 19
+steps_per_epoch: 20
+max_to_keep: 10
+
+per_replica_batch_size: 256
+test_batch_size: 256
+initial_epoch: 0
+epochs: 3
+# learning_rate: 0.001
+eval_every: 1
+lfw_n_folds: 10
+
+lr_steps: [10000, 15000, 20000, 25000]
+lr_values: [0.001, 0.0008, 0.0005, 0.0003, 0.0001]
+
+data_dir: /mnt/disks/data/sirius/datasets/sample_asian_and_msra_mtcnnpy_112_margin32
+lfw_pairs: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt
+lfw_dir: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+ckpt_dir: /tmp/models
+logdir: /tmp/models/logs

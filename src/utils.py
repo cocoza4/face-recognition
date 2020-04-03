@@ -1,4 +1,5 @@
 import os
+import yaml
 import time
 import random
 import itertools
@@ -15,6 +16,16 @@ def create_dir(path):
         shutil.rmtree(path)
     os.makedirs(path)
 
+def save_configs(path, config):
+    with open(path, 'w') as f:
+        f.write('Parameters\n')
+        for arg, value in config.items():
+            f.write('{}: {}\n'.format(arg, value))
+
+def load_config_file(path):
+    with open(path) as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+        return config
 
 def get_data(path):
     ids = [o for o in os.listdir(path) if os.path.isdir(os.path.join(path, o))]

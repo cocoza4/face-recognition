@@ -1,7 +1,48 @@
 import os
+import csv
+from tqdm.auto import tqdm
 import numpy as np
 from scipy import interpolate
 from sklearn.model_selection import KFold
+
+
+class LFWEvaluator:
+
+    def __init__(self, lfw_dir, lfw_pairs, batch_size, embedding_size, n_folds=10):
+        pairs = read_pairs(lfw_pairs)
+        lfw_paths, issame = get_paths(lfw_dir, pairs)
+
+        self.image_paths = lfw_paths
+        self.issame = issame
+        self.batch_size = batch_size
+        self.embedding_size = embedding_size
+        self.n_folds = n_folds
+
+        self.n_images = len(self.issame) * 2
+        assert len(self.image_paths) == self.n_images
+
+    def evaluate(self, predict_fn):
+        embs_array = np.zeros((self.n_images, self.embedding_size))
+        it = tqdm(range(0, self.n_images, self.batch_size), 'evaluate on LFW')
+        for start in it:
+            end = start + self.batch_size
+            embs_array[start:end] = predict_fn(self.image_paths[start:end])
+            
+        _, _, accuracy, val, val_std, far, frr = evaluate(embs_array, self.issame, n_folds=self.n_folds)
+        
+        print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+        print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
+
+        return np.mean(accuracy), val, far, frr
+
+def save_lfw_result(path, accuracy, val, far, frr):
+    columns = ['accuracy', 'val', 'far', 'frr']
+    exists = os.path.exists(path)
+    with open(path, mode='a+') as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        if not exists:
+            writer.writeheader()
+        writer.writerow({'accuracy': accuracy, 'val': val, 'far': far, 'frr':frr})
 
 
 def add_extension(path):
