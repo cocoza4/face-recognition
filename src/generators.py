@@ -51,7 +51,7 @@ class TFRecordDataGenerator:
             steps += 1
         return steps
     
-    def generate(self, example_parser, preprocess_fn=None, shuffle_buffer=100000):
+    def generate(self, example_parser, preprocess_fn=None, shuffle_buffer=50000):
         tfrecords = self._tfrecord_files()
 
         ds = (tf.data.TFRecordDataset(filenames=tfrecords)
