@@ -7,9 +7,33 @@ import shutil
 import numpy as np
 
 
+class ImageClass:
+    "Stores the paths to images for a given class"
+    def __init__(self, name, image_paths):
+        self.name = name
+        self.image_paths = image_paths
+  
+    def __str__(self):
+        return self.name + ', ' + str(len(self.image_paths)) + ' images'
+  
+    def __len__(self):
+        return len(self.image_paths)
+    
+def get_image_classes(path):
+    dataset = []
+    classes = [o for o in os.listdir(path) \
+                    if os.path.isdir(os.path.join(path, o))]
+    classes.sort()
+    nrof_classes = len(classes)
+    for class_name in classes:
+        facedir = os.path.join(path, class_name)
+        image_paths = get_files_under_directory(facedir, include_parent=True)
+        dataset.append(ImageClass(class_name, image_paths))
+  
+    return dataset
+
 def flatten(xs):
     return list(itertools.chain(*xs))
-
 
 def create_dir(path):
     if os.path.exists(path):
@@ -55,10 +79,16 @@ def combine_datasets(data_paths):
         id_start += np.max(labels) + 1
     return all_paths, all_labels
 
-def get_files_under_directory(path):
-    files = [name for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))]
+def get_files_under_directory(path, include_parent=False):
+    files = [os.path.join(path, name) if include_parent else name \
+             for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))]
     return files
 
+def to_rgb(img):
+    w, h = img.shape
+    ret = np.empty((w, h, 3), dtype=np.uint8)
+    ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = img
+    return ret
 
 def sample_people_for_epoch(dataset_root, people_per_epoch, faces_per_person):
     """
