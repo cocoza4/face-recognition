@@ -85,10 +85,19 @@ def get_files_under_directory(path, include_parent=False):
     return files
 
 def to_rgb(img):
-    w, h = img.shape
-    ret = np.empty((w, h, 3), dtype=np.uint8)
-    ret[:, :, 0] = ret[:, :, 1] = ret[:, :, 2] = img
-    return ret
+    if len(img.shape) == 2:
+        img = np.expand_dims(img, axis=-1)
+        
+    w, h, c = img.shape
+    if c == 1:
+        rgb = np.empty((w, h, 3), dtype=np.uint8)
+        rgb[:, :, 0] = rgb[:, :, 1] = rgb[:, :, 2] = img.squeeze()
+    elif c > 3:
+        rgb = img[:, :, 0:3]
+    else:
+        rgb = img
+        
+    return rgb
 
 def sample_people_for_epoch(dataset_root, people_per_epoch, faces_per_person):
     """
