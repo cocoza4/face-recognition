@@ -9,7 +9,7 @@ class ArcFaceModel(tf.keras.Model):
         self.backbone = backbone
         self.bn1 = BatchNormalization()
         # self.dropout = tf.keras.layers.Dropout(0.4)
-        self.dense = Dense(embedding_size, use_bias=False)
+        self.dense = Dense(embedding_size, use_bias=True)
         self.bn2 = BatchNormalization(scale=False)
         
     def call(self, inputs, training=False):

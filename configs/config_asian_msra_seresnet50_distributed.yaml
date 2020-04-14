@@ -9,7 +9,7 @@ img_width: 112
 img_height: 112
 embedding_size: 512
 n_classes: 180855
-steps_per_epoch: 5000
+steps_per_epoch: 10000
 max_to_keep: 10
 
 per_replica_batch_size: 64
@@ -23,7 +23,7 @@ optimizer: 'sgd' # adam, sdg
 mom: 0.9
 # learning_rate: 0.001
 lr_steps: [10000]
-lr_values: [0.001, 0.001]
+lr_values: [0.1, 0.1]
 
 train_dir: /mnt/disks/data/sirius/datasets/asian_and_msra_mtcnnpy_112_margin32
 
@@ -34,5 +34,5 @@ lfw_n_folds: 10
 lfw_pairs: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt
 lfw_dir: /mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
 
-ckpt_dir: /home/peeranat_absoroute_io/trained_models/arcface_models/seresnet50_asian_msra_06042020
-logdir: /home/peeranat_absoroute_io/trained_models/arcface_models/seresnet50_asian_msra_06042020/logs
+ckpt_dir: /home/peeranat_absoroute_io/trained_models/arcface_models/seresnet50_asian_msra_15042020
+logdir: /home/peeranat_absoroute_io/trained_models/arcface_models/seresnet50_asian_msra_15042020/logs

@@ -146,10 +146,10 @@ def train(cfg, model, emb_weights, optimizer, learning_rate, global_step, train_
                 evaluate(summary, global_step, lfw_evaluator.evaluate, predict_fn, 'lfw', lfw_results_file)
                 
                 # cfp front face
-                evaluate(summary, global_step, cfp_evaluator.evaluate_ff, predict_fn, 'cfp/ff', cfp_ff_results_file)
+                evaluate(summary, global_step, cfp_evaluator.evaluate_ff, predict_fn, 'cfp_ff', cfp_ff_results_file)
 
                 # cfp front profile
-                evaluate(summary, global_step, cfp_evaluator.evaluate_fp, predict_fn, 'cfp/fp', cfp_fp_results_file)
+                evaluate(summary, global_step, cfp_evaluator.evaluate_fp, predict_fn, 'cfp_fp', cfp_fp_results_file)
 
             writer.flush()
             
