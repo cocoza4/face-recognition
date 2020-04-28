@@ -136,7 +136,7 @@ def train(cfg, model, emb_weights, optimizer, learning_rate, global_step, train_
                 elapsed = time.time() - t1
 
                 current_lr = learning_rate().numpy()
-                print(log_template % (epoch+1, step+1, cfg['steps_per_epoch'], global_step.numpy(), elapsed, loss.numpy(), current_lr))
+                print(log_template % (epoch+1, step+1, cfg['steps_per_epoch'], global_step.numpy()+1, elapsed, loss.numpy(), current_lr))
                                         
                 summary.scalar('train/loss', loss, step=global_step)
                 global_step.assign_add(1)
