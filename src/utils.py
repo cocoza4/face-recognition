@@ -5,6 +5,7 @@ import random
 import itertools
 import shutil
 import numpy as np
+from PIL import Image
 
 
 class ImageClass:
@@ -18,6 +19,10 @@ class ImageClass:
   
     def __len__(self):
         return len(self.image_paths)
+
+def read_rgb(path):
+    image = np.asarray(Image.open(path).convert('RGB'))
+    return image
     
 def get_image_classes(path):
     dataset = []

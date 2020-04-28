@@ -9,7 +9,7 @@ from evaluate.eval_utils import calculate_accuracy, calculate_val_far_frr
 
 class LFWEvaluator:
 
-    def __init__(self, lfw_dir, lfw_pairs, batch_size, embedding_size, n_folds=10):
+    def __init__(self, lfw_dir, lfw_pairs, batch_size, embedding_size, far_target=1e-3, n_folds=10):
         pairs = read_pairs(lfw_pairs)
         lfw_paths, issame = get_paths(lfw_dir, pairs)
 
@@ -18,6 +18,7 @@ class LFWEvaluator:
         self.batch_size = batch_size
         self.embedding_size = embedding_size
         self.n_folds = n_folds
+        self.far_target = far_target
 
         self.n_images = len(self.issame) * 2
         assert len(self.image_paths) == self.n_images
@@ -29,10 +30,12 @@ class LFWEvaluator:
             end = start + self.batch_size
             embs_array[start:end] = predict_fn(self.image_paths[start:end])
             
-        _, _, accuracy, val, val_std, far, frr = evaluate(embs_array, self.issame, n_folds=self.n_folds)
+        _, _, accuracy, val, val_std, far, frr = evaluate(embs_array, self.issame, far_target=self.far_target, n_folds=self.n_folds)
         
-        print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-        print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
+        # xnorm = np.linalg.norm(embs_array, axis=1).mean()
+        # print('[lfw]XNorm: %f' % xnorm)
+        print('[lfw]Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+        print('[lfw]Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
 
         return np.mean(accuracy), val, far, frr
 
@@ -158,7 +161,7 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
     return val_mean, val_std, far_mean, frr_mean
 
 
-def evaluate(embeddings, actual_issame, n_folds=10, subtract_mean=False):
+def evaluate(embeddings, actual_issame, far_target, n_folds=10, subtract_mean=False):
     # Calculate evaluation metrics
     thresholds = np.arange(0, 4, 0.01)
     embeddings1 = embeddings[0::2]
@@ -167,6 +170,6 @@ def evaluate(embeddings, actual_issame, n_folds=10, subtract_mean=False):
         np.asarray(actual_issame), n_folds=n_folds, subtract_mean=subtract_mean)
     thresholds = np.arange(0, 4, 0.001)
     val, val_std, far, frr = calculate_val(thresholds, embeddings1, embeddings2,
-        np.asarray(actual_issame), 1e-3, n_folds=n_folds, subtract_mean=subtract_mean)
+        np.asarray(actual_issame), far_target, n_folds=n_folds, subtract_mean=subtract_mean)
 
     return tpr, fpr, accuracy, val, val_std, far, frr

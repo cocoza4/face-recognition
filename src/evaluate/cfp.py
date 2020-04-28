@@ -31,8 +31,8 @@ class CFPEvaluator:
         thresholds = np.arange(0, 4, 0.001)
         val, val_std, far, frr = calculate_val(thresholds, folds, issame_folds, far_target=self.far_target)
 
-        print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-        print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
+        print('[cfp_ff]Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+        print('[cfp_ff]Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
         
         return np.mean(accuracy), val, far, frr
 
@@ -45,8 +45,8 @@ class CFPEvaluator:
         thresholds = np.arange(0, 4, 0.001)
         val, val_std, far, frr = calculate_val(thresholds, folds, issame_folds, far_target=self.far_target)
 
-        print('Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
-        print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
+        print('[cfp_fp]Accuracy: %1.3f+-%1.3f' % (np.mean(accuracy), np.std(accuracy)))
+        print('[cfp_fp]Validation rate: %2.5f+-%2.5f @ FAR=%2.5f, FRR=%2.5f' % (val, val_std, far, frr))
         
         return np.mean(accuracy), val, far, frr
 
@@ -163,8 +163,9 @@ def get_XY(df):
         same = bool(row['same'])
         
         if not os.path.exists(id1) or not os.path.exists(id2):
-            print('Skipping {} and {} pair, either one of them or both are missing '
-                  'due to unsuccessful face detection'.format(str(id1), str(id2)))
+            pass
+            # print('Skipping {} and {} pair, either one of them or both are missing '
+            #       'due to unsuccessful face detection'.format(str(id1), str(id2)))
         else:
             image_paths += [id1, id2]
             same_list.append(same)
