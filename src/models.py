@@ -1,6 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras.layers import BatchNormalization, Dense, Flatten
 
+from backbone import resnet
+
 
 class ArcFaceModel(tf.keras.Model):
     
@@ -22,11 +24,32 @@ class ArcFaceModel(tf.keras.Model):
 
 
 def create_model(backbone_name, emb_size):
-    if backbone_name == 'densenet121':
-        backbone = tf.keras.applications.DenseNet121(weights=None, include_top=False, pooling='avg')
-    elif backbone_name == 'se-resnet50':
-        from backbone.resnet import SEResNet
-        backbone = SEResNet(blocks=[3, 4, 6, 3])
+
+    # ResNet
+    if backbone_name == 'resnet18':
+        backbone = resnet.ResNet(blocks=[2, 2, 2, 2], name=backbone_name)
+    elif backbone_name == 'resnet34':
+        backbone = resnet.ResNet(blocks=[3, 4, 6, 3], name=backbone_name)
+    elif backbone_name == 'resnet50':
+        backbone = resnet.ResNet(blocks=[3, 4, 6, 3], name=backbone_name, block_type=resnet.Bottleneck)
+    elif backbone_name == 'resnet100':
+        backbone = resnet.ResNet(blocks=[3, 4, 23, 3], name=backbone_name, block_type=resnet.Bottleneck)
+    elif backbone_name == 'resnet152':
+        backbone = resnet.ResNet(blocks=[3, 8, 36, 3], name=backbone_name, block_type=resnet.Bottleneck)
+
+    # SE-ResNet
+    elif backbone_name == 'seresnet18':
+        backbone = resnet.SEResNet(blocks=[2, 2, 2, 2], name=backbone_name)
+    elif backbone_name == 'seresnet34':
+        backbone = resnet.SEResNet(blocks=[3, 4, 6, 3], name=backbone_name)
+    elif backbone_name == 'seresnet50':
+        backbone = resnet.SEResNet(blocks=[3, 4, 6, 3], name=backbone_name, block_type=resnet.SEBottleneck)
+    elif backbone_name == 'seresnet100':
+        backbone = resnet.SEResNet(blocks=[3, 4, 23, 3], name=backbone_name, block_type=resnet.SEBottleneck)
+    elif backbone_name == 'seresnet152':
+        backbone = resnet.SEResNet(blocks=[3, 8, 36, 3], name=backbone_name, block_type=resnet.SEBottleneck)
+
+    # TODO: DenseNet
 
     model = ArcFaceModel(backbone, emb_size)
     return model
