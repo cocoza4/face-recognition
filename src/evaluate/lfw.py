@@ -99,6 +99,8 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, n_folds=1
     
     indices = np.arange(nrof_pairs)
     
+    fold_thresholds = []
+    print('[Accuracy]')
     for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):
         if subtract_mean:
             mean = np.mean(np.concatenate([embeddings1[train_set], embeddings2[train_set]]), axis=0)
@@ -111,14 +113,20 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, n_folds=1
         acc_train = np.zeros((nrof_thresholds))
         for threshold_idx, threshold in enumerate(thresholds):
             _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist[train_set], actual_issame[train_set])
+
         best_threshold_index = np.argmax(acc_train)
+        fold_threshold = thresholds[best_threshold_index]
         for threshold_idx, threshold in enumerate(thresholds):
             tprs[fold_idx,threshold_idx], fprs[fold_idx,threshold_idx], _ = calculate_accuracy(threshold, dist[test_set], actual_issame[test_set])
-        _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set], actual_issame[test_set])
-          
-        print('Best threshold for fold %d: %f' % (fold_idx, thresholds[best_threshold_index]))
-        tpr = np.mean(tprs, 0)
-        fpr = np.mean(fprs, 0)
+        _, _, accuracy[fold_idx] = calculate_accuracy(fold_threshold, dist[test_set], actual_issame[test_set])
+        
+        fold_thresholds.append(fold_threshold)
+        print('[Fold=%d]Threshold %f' % (fold_idx, fold_threshold))
+
+    print('[Accuracy]Average best threshold: %1.3f+-%1.3f' % (np.mean(fold_thresholds), np.std(fold_thresholds)))
+    tpr = np.mean(tprs, 0)
+    fpr = np.mean(fprs, 0)
+
     return tpr, fpr, accuracy
 
 
@@ -135,6 +143,8 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
     
     indices = np.arange(nrof_pairs)
     
+    fold_thresholds = []
+    print('[VAL]FAR: %f' % far_target)
     for fold_idx, (train_set, test_set) in enumerate(k_fold.split(indices)):
         if subtract_mean:
             mean = np.mean(np.concatenate([embeddings1[train_set], embeddings2[train_set]]), axis=0)
@@ -151,9 +161,15 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
             threshold = f(far_target)
         else:
             threshold = 0.0
-    
+
+        fold_thresholds.append(threshold)
+
+        print('[Fold=%d]Threshold: %f' % (fold_idx, threshold))
         val[fold_idx], far[fold_idx], frr[fold_idx] = calculate_val_far_frr(threshold, dist[test_set], actual_issame[test_set])
-  
+
+    print('[VAL]Average best threshold at FAR=%f: %1.3f+-%1.3f' \
+            % (far_target, np.mean(fold_thresholds), np.std(fold_thresholds)))
+
     val_mean = np.mean(val)
     far_mean = np.mean(far)
     frr_mean = np.mean(frr)

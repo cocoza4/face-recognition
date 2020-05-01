@@ -92,6 +92,8 @@ def calculate_roc(thresholds, folds, issame_folds):
     fprs = np.zeros((n_folds, n_thresholds))
     accuracy = np.zeros((n_folds))
     
+    fold_thresholds = []
+    print('[Accuracy]')
     for fold_idx in range(len(folds)):
         embs_train = np.concatenate([folds[j] for j in range(n_folds) if fold_idx != j], axis=0)
         same_train = np.concatenate([issame_folds[j] for j in range(n_folds) if fold_idx != j], axis=0)
@@ -105,13 +107,19 @@ def calculate_roc(thresholds, folds, issame_folds):
             _, _, acc_train[threshold_idx] = calculate_accuracy(threshold, dist_train, same_train)
 
         best_threshold_idx = np.argmax(acc_train)
+        fold_threshold = thresholds[best_threshold_idx]
         for threshold_idx, threshold in enumerate(thresholds):
                 tprs[fold_idx, threshold_idx], fprs[fold_idx, threshold_idx], _ = \
                             calculate_accuracy(threshold, dist_eval, same_eval)
-        _, _, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_idx], dist_eval, same_eval)
+        _, _, accuracy[fold_idx] = calculate_accuracy(fold_threshold, dist_eval, same_eval)
 
-        tpr = np.mean(tprs, 0)
-        fpr = np.mean(fprs, 0)
+        fold_thresholds.append(fold_threshold)
+        print('[Fold=%d]Threshold %f' % (fold_idx, fold_threshold))
+
+    print('[Accuracy]Average best threshold: %1.3f+-%1.3f' % (np.mean(fold_thresholds), np.std(fold_thresholds)))
+
+    tpr = np.mean(tprs, 0)
+    fpr = np.mean(fprs, 0)
         
     return tpr, fpr, accuracy
 
@@ -121,6 +129,9 @@ def calculate_val(thresholds, folds, issame_folds, far_target):
     far = np.zeros(n_folds)
     frr = np.zeros(n_folds)
     n_thresholds = len(thresholds)
+
+    fold_thresholds = []
+    print('[VAL]FAR: %f' % far_target)
     for fold_idx in range(len(folds)):
         embs_train = np.concatenate([folds[j] for j in range(n_folds) if fold_idx != j], axis=0)
         same_train = np.concatenate([issame_folds[j] for j in range(n_folds) if fold_idx != j], axis=0)
@@ -134,14 +145,21 @@ def calculate_val(thresholds, folds, issame_folds, far_target):
         far_train = np.zeros(n_thresholds)
         for threshold_idx, threshold in enumerate(thresholds):
             _, far_train[threshold_idx], _ = calculate_val_far_frr(threshold, dist_train, same_train)
-            if np.max(far_train) >= far_target:
-                f = interpolate.interp1d(far_train, thresholds, kind='slinear')
-                threshold = f(far_target)
-            else:
-                threshold = 0.0
+        if np.max(far_train) >= far_target:
+            f = interpolate.interp1d(far_train, thresholds, kind='slinear')
+            threshold = f(far_target)
+        else:
+            threshold = 0.0
 
-            val[fold_idx], far[fold_idx], frr[fold_idx] = \
-                    calculate_val_far_frr(threshold, dist_eval, same_eval)
+        fold_thresholds.append(threshold)
+
+        print('[Fold=%d]Threshold: %f' % (fold_idx, threshold))
+
+        val[fold_idx], far[fold_idx], frr[fold_idx] = \
+                calculate_val_far_frr(threshold, dist_eval, same_eval)
+
+    print('[VAL]Average best threshold at FAR=%f: %1.3f+-%1.3f' \
+            % (far_target, np.mean(fold_thresholds), np.std(fold_thresholds)))
 
     val_mean = np.mean(val)
     far_mean = np.mean(far)
