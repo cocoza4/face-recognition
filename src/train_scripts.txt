@@ -1,0 +1,79 @@
+
+# sample dataset
+python train_arcface.py --n_classes=5 --batch_size=128 --learning_rate=0.001 \
+    --epochs=3 \
+    --ckpt_dir=/tmp/models \
+    --logdir=/tmp/models/logs \
+    --data_dir=/mnt/disks/data/datasets/vggface2/sample_train_mtcnnpy_112_margin32 \
+    --lfw_pairs=/mnt/disks/data/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt \
+    --lfw_dir=/mnt/disks/data/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+# VGGFace2 dataset
+python train_arcface.py --n_classes=8631 --batch_size=256 --initial_epoch=38 --learning_rate=0.0003 --m3=0.\
+    --ckpt_dir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_20022020 \
+    --logdir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_20022020/logs \
+    --data_dir=/mnt/disks/data/datasets/vggface2/train_mtcnnpy_112_margin32 \
+    --lfw_pairs=/mnt/disks/data/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt \
+    --lfw_dir=/mnt/disks/data/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+for N in {1..3}; do \
+/home/peeranat_absoroute_io/anaconda3/envs/tensorflow1.x/bin/python src/align/align_dataset_mtcnn.py \
+/mnt/disks/data/sirius/datasets/msra/ \
+/mnt/disks/data/sirius/datasets/msra_mtcnnpy_112_margin32 \
+--image_size 112 \
+--margin 32 \
+--random_order \
+--gpu_memory_fraction 0.3 \
+& done
+
+# create tfrecords - Asian
+/home/peeranat_absoroute_io/anaconda3/envs/python3.6/bin/python create_tfrecords.py \
+--data_path /mnt/disks/data/sirius/datasets/celebrity_mtcnnpy_112_margin32 \
+--output_path /mnt/disks/data/sirius/datasets/asian_mtcnnpy_112_margin32_tfrecord \
+--n_shards 10
+
+# create sample tfrecords
+/home/peeranat_absoroute_io/anaconda3/envs/python3.6/bin/python create_tfrecords.py \
+--data_path /mnt/disks/data/sirius/datasets/sample_celebrity_mtcnnpy_112_margin32/ \
+--data_path /mnt/disks/data/sirius/datasets/sample_msra_mtcnnpy_112_margin32/ \
+--output_path /mnt/disks/data/sirius/datasets/sample_asian_and_msra_mtcnnpy_112_margin32 \
+--n_shards 10
+
+# create tfrecords
+/home/peeranat_absoroute_io/anaconda3/envs/python3.6/bin/python create_tfrecords.py \
+--data_path /mnt/disks/data/sirius/datasets/celebrity_mtcnnpy_112_margin32/ \
+--data_path /mnt/disks/data/sirius/datasets/msra_mtcnnpy_112_margin32/ \
+--output_path /mnt/disks/data/sirius/datasets/asian_and_msra_mtcnnpy_112_margin32 \
+--n_shards 10
+
+# train sample asian and msra datasets
+python train_arcface.py --n_classes=19 --batch_size=64 --initial_epoch=0 --learning_rate=0.01 --m2=0.5 --m3=0.\
+    --ckpt_dir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_sample_asian_msra \
+    --logdir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_sample_asian_msra/logs \
+    --data_dir=/mnt/disks/data/sirius/datasets/sample_asian_and_msra_mtcnnpy_112_margin32 \
+    --lfw_pairs=/mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt \
+    --lfw_dir=/mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+python train_arcface.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_sample_asian_msra_densenet121.yaml
+
+
+# train asian and msra datasets
+python train_arcface.py --n_classes=180855 --batch_size=256 --initial_epoch=0 --learning_rate=0.001 --lr_decay_steps 5000 --m2=0.5 --m3=0.\
+    --ckpt_dir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3 \
+    --logdir=/home/peeranat_absoroute_io/trained_models/arcface_models/densenet121_asian_msra_3/logs \
+    --data_dir=/mnt/disks/data/sirius/datasets/asian_and_msra_mtcnnpy_112_margin32 \
+    --lfw_pairs=/mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32/pairs.txt \
+    --lfw_dir=/mnt/disks/data/sirius/datasets/lfw-deepfunneled_mtcnnpy_112_margin32
+
+python train_arcface.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_asian_msra_resnet101v2.yaml
+python train_arcface.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_asian_msra_densenet121.yaml
+python train_distributed.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_asian_msra_densenet121_distributed.yaml
+python train_distributed.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_asian_msra_seresnet50_distributed.yaml
+python train_distributed.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_sample_distributed.yaml
+
+python train_distributed.py --config_path /home/peeranat_absoroute_io/workspace/asr-face-recognition/configs/config_asian_msra_resnet34_distributed.yaml
+
+
+
+latest step
+Epoch: 8[339/5000]      Step 35338      Time 1.897      Loss 4.564      lr 0.00010
